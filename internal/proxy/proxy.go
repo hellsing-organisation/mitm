@@ -45,6 +45,7 @@ type connMeta struct {
 	proto   string
 	src     string
 	dst     string
+	pending sync.WaitGroup
 }
 
 type Server struct {
@@ -215,11 +216,12 @@ func (s *Server) handleConn(c net.Conn) {
 	connClosed := make(chan struct{})
 	var connClosedOnce sync.Once
 	srv.ConnState = func(_ net.Conn, state http.ConnState) {
-		if state == http.StateClosed {
+		if state == http.StateClosed || state == http.StateHijacked {
 			connClosedOnce.Do(func() { close(connClosed) })
 		}
 	}
 	srv.Serve(&oneConnListener{c: tlsConn, closed: connClosed})
+	meta.pending.Wait()
 }
 
 type oneConnListener struct {
@@ -404,9 +406,12 @@ func (s *Server) handleUpgrade(w http.ResponseWriter, r *http.Request, resp *htt
 	meta *connMeta, pid *int32, uid *uint32, comm string, detail *audit.HTTPDetail, reqCap *audit.LimitBuf) {
 
 	detail.Note = "websocket upgrade, frames not parsed"
+	meta.pending.Add(1)
+	defer meta.pending.Done()
 	rc := http.NewResponseController(w)
 	clientConn, clientBuf, err := rc.Hijack()
 	if err == nil {
+		clientBuf.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
 		for k, vv := range resp.Header {
 			for _, v := range vv {
 				clientBuf.WriteString(k + ": " + v + "\r\n")
@@ -414,14 +419,21 @@ func (s *Server) handleUpgrade(w http.ResponseWriter, r *http.Request, resp *htt
 		}
 		clientBuf.WriteString("\r\n")
 		clientBuf.Flush()
+
 		upDone := make(chan struct{})
 		go func() {
 			io.Copy(clientConn, resp.Body)
+			clientConn.Close()
 			close(upDone)
 		}()
-		io.Copy(resp.Body.(io.Writer), clientConn)
+		type readWriter interface {
+			io.Reader
+			io.Writer
+		}
+		if ub, ok := resp.Body.(readWriter); ok {
+			io.Copy(ub, clientBuf)
+		}
 		<-upDone
-		clientConn.Close()
 	}
 	s.finishEvent(meta, pid, uid, comm, detail, reqCap, nil, r.Header.Get("Content-Encoding"))
 }
