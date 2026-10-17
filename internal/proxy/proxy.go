@@ -89,7 +89,9 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.cfg.Listen, err)
 	}
+	s.connsMu.Lock()
 	s.ln = ln
+	s.connsMu.Unlock()
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -120,6 +122,8 @@ func (s *Server) untrackConn(c net.Conn) {
 }
 
 func (s *Server) Addr() net.Addr {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
 	if s.ln == nil {
 		return nil
 	}
@@ -128,10 +132,10 @@ func (s *Server) Addr() net.Addr {
 
 func (s *Server) Close() error {
 	s.closed.Store(true)
+	s.connsMu.Lock()
 	if s.ln != nil {
 		s.ln.Close()
 	}
-	s.connsMu.Lock()
 	for c := range s.conns {
 		c.Close()
 	}
