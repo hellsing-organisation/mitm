@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: (MIT OR GPL-2.0)
+#ifndef __BPF_HELPERS__
+#define __BPF_HELPERS__
+
+typedef unsigned char __u8;
+typedef unsigned short __u16;
+typedef unsigned int __u32;
+typedef unsigned long long __u64;
+typedef signed char __s8;
+typedef short __s16;
+typedef int __s32;
+typedef long long __s64;
+
+#define SEC(x) __attribute__((section(x), used))
+
+#ifndef __uint
+#define __uint(name, val) int (*name)[val]
+#endif
+#ifndef __type
+#define __type(name, val) typeof(val) *name
+#endif
+#ifndef __array
+#define __array(name, val) typeof(val) *name[]
+#endif
+
+#define BPF_MAP_TYPE_RINGBUF 27
+
+static __u64 (*bpf_ktime_get_ns)(void) = (void *)5;
+static __u64 (*bpf_get_current_pid_tgid)(void) = (void *)14;
+static __u64 (*bpf_get_current_uid_gid)(void) = (void *)15;
+static __u32 (*bpf_get_current_comm)(void *buf, __u32 size) = (void *)16;
+static __u64 (*bpf_ringbuf_output)(void *ringbuf, void *data, __u64 size, __u64 flags) = (void *)130;
+
+#endif

@@ -12,8 +12,9 @@ test:
 	go test ./...
 
 bpf:
-	clang -target bpfel -O2 -g -Ibpf/include -c bpf/flows.bpf.c -o bpf/flows.bpf.o
+	clang -target bpfel -O2 -g -Ibpf -c bpf/flows.bpf.c -o internal/bpf/flows.bpf.o
 	go build -tags bpf ./...
+	go test -tags bpf ./internal/bpf/
 
 android: clean-dist
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/mitmd-linux-arm64 ./cmd/mitmd
