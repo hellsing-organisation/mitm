@@ -1,0 +1,23 @@
+listen: 127.0.0.1:8080
+ports: [443, 8443]
+ca:
+  key: /etc/mitm/ca.key
+  cert: /etc/mitm/ca.crt
+redirect:
+  mark: 1337
+  managed: true
+  backend: auto
+quic:
+  force_tcp: true
+capture:
+  bodies: true
+  max_body_bytes: 16777216
+  content_types: ["*/*"]
+  exclude_content_types: ["image/*", "video/*", "audio/*", "font/*"]
+filters:
+  exclude_processes: ["mitmd"]
+  include_domains: []
+  exclude_domains: []
+output:
+  dir: /var/log/mitm-audit
+  jsonl: events.jsonl

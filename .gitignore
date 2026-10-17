@@ -1,0 +1,5 @@
+/dist/
+*.bpf.o
+bpf/vmlinux.h
+*.test
+/tmp/
