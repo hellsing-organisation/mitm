@@ -98,9 +98,9 @@ func TestFullHandshakeWithMintedLeaf(t *testing.T) {
 	clientErr := make(chan error, 1)
 	go func() {
 		tlsConn := tls.Client(c, &tls.Config{
-			ServerName:  "example.com",
-			RootCAs:     ca.Pool(),
-			MinVersion:  tls.VersionTLS12,
+			ServerName: "example.com",
+			RootCAs:    ca.Pool(),
+			MinVersion: tls.VersionTLS12,
 		})
 		if err := tlsConn.Handshake(); err != nil {
 			clientErr <- err

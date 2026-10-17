@@ -41,6 +41,7 @@ type AlertDetail struct {
 type Event struct {
 	Ts     time.Time    `json:"ts"`
 	Type   string       `json:"type"`
+	Note   string       `json:"note,omitempty"`
 	FlowID string       `json:"flow_id,omitempty"`
 	PID    *int32       `json:"pid,omitempty"`
 	UID    *uint32      `json:"uid,omitempty"`

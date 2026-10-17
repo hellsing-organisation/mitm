@@ -27,10 +27,10 @@ type flowEntry struct {
 }
 
 type FlowRegistry struct {
-	mu        sync.Mutex
-	flows     map[FlowKey]*flowEntry
-	onAlert   func(Event)
-	watch     map[int]struct{}
+	mu         sync.Mutex
+	flows      map[FlowKey]*flowEntry
+	onAlert    func(Event)
+	watch      map[int]struct{}
 	claimedTTL time.Duration
 	alertAfter time.Duration
 }
@@ -46,11 +46,11 @@ func NewFlowRegistry(onAlert func(Event), watchedPorts []int) *FlowRegistry {
 		w[p] = struct{}{}
 	}
 	return &FlowRegistry{
-		flows:       make(map[FlowKey]*flowEntry),
-		onAlert:     onAlert,
-		watch:       w,
-		claimedTTL:  defaultClaimedTTL,
-		alertAfter:  defaultAlertAfter,
+		flows:      make(map[FlowKey]*flowEntry),
+		onAlert:    onAlert,
+		watch:      w,
+		claimedTTL: defaultClaimedTTL,
+		alertAfter: defaultAlertAfter,
 	}
 }
 
@@ -96,13 +96,13 @@ func (r *FlowRegistry) Sweep(now time.Time) {
 			pid := e.info.PID
 			uid := e.info.UID
 			fired = append(fired, Event{
-				Ts:     now,
-				Type:   TypeAlert,
-				PID:    &pid,
-				UID:    &uid,
-				Comm:   e.info.Comm,
-				Src:    joinHostPort(k.SrcIP, k.SrcPort),
-				Dst:    joinHostPort(k.DstIP, k.DstPort),
+				Ts:   now,
+				Type: TypeAlert,
+				PID:  &pid,
+				UID:  &uid,
+				Comm: e.info.Comm,
+				Src:  joinHostPort(k.SrcIP, k.SrcPort),
+				Dst:  joinHostPort(k.DstIP, k.DstPort),
 				Alert: &AlertDetail{
 					Kind: KindUnproxiedTLS,
 					Note: "no proxy session within window (likely cert pinning or non-TLS on watched port)",

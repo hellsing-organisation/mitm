@@ -45,14 +45,14 @@ type OutputCfg struct {
 }
 
 type Config struct {
-	Listen   string       `yaml:"listen"`
-	Ports    []int        `yaml:"ports"`
-	CA       CAPaths      `yaml:"ca"`
-	Redirect RedirectCfg  `yaml:"redirect"`
-	QUIC     QUICCfg      `yaml:"quic"`
-	Capture  CaptureCfg   `yaml:"capture"`
-	Filters  Filters      `yaml:"filters"`
-	Output   OutputCfg    `yaml:"output"`
+	Listen   string      `yaml:"listen"`
+	Ports    []int       `yaml:"ports"`
+	CA       CAPaths     `yaml:"ca"`
+	Redirect RedirectCfg `yaml:"redirect"`
+	QUIC     QUICCfg     `yaml:"quic"`
+	Capture  CaptureCfg  `yaml:"capture"`
+	Filters  Filters     `yaml:"filters"`
+	Output   OutputCfg   `yaml:"output"`
 }
 
 func Default() Config {
