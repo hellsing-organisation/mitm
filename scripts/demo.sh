@@ -16,9 +16,11 @@ cleanup() {
     [ -n "${MITMD_PID:-}" ] && kill "$MITMD_PID" 2>/dev/null || true
     wait "${MITMD_PID:-}" 2>/dev/null || true
     nft delete table inet mitm_audit 2>/dev/null || true
+    rm -f "$ROOT/internal/bpf/flows.bpf.o"
     rm -rf "$DIR"
 }
 trap cleanup EXIT
+rm -f "$ROOT/internal/bpf/flows.bpf.o"
 
 go build -buildvcs=false -o "$DIR/mitmd" "$ROOT/cmd/mitmd" || exit 1
 

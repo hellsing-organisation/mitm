@@ -88,3 +88,41 @@ func TestReleaseRemoves(t *testing.T) {
 		t.Fatal("released flow must be gone")
 	}
 }
+
+func TestTakeWaitBlocksForLateFlow(t *testing.T) {
+	r := NewFlowRegistry(func(Event) {}, []int{443})
+	k := key1()
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		r.Add(k, FlowInfo{PID: 99, Comm: "late", Ts: time.Now()})
+	}()
+	fi := r.TakeWait(k, 500*time.Millisecond)
+	if fi == nil || fi.PID != 99 {
+		t.Fatalf("TakeWait = %+v, want late flow", fi)
+	}
+
+	r2 := NewFlowRegistry(func(Event) {}, []int{443})
+	if fi := r2.TakeWait(k, 10*time.Millisecond); fi != nil {
+		t.Fatalf("TakeWait with no flow should time out, got %+v", fi)
+	}
+}
+
+func TestMarkClaimedPreventsTripwire(t *testing.T) {
+	alerts := []Event{}
+	r := NewFlowRegistry(func(e Event) { alerts = append(alerts, e) }, []int{443})
+	now := time.Now()
+	k := key1()
+	r.MarkClaimed(k)
+	r.Sweep(now.Add(30 * time.Second))
+	if len(alerts) != 0 {
+		t.Fatal("tombstone must prevent false tripwire alert")
+	}
+}
+
+func TestFlowIDStable(t *testing.T) {
+	a := FlowID(key1())
+	b := FlowID(key1())
+	if a != b || len(a) != 16 {
+		t.Fatalf("FlowID unstable: %q %q", a, b)
+	}
+}

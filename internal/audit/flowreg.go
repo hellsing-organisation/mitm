@@ -1,11 +1,21 @@
 package audit
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
 	"time"
 )
+
+// FlowID derives the stable per-flow identifier shared by flow, http, and
+// alert events for the same connection.
+func FlowID(k FlowKey) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%+v", k)))
+	return hex.EncodeToString(sum[:])[:16]
+}
 
 type FlowKey struct {
 	SrcIP   string
@@ -70,6 +80,32 @@ func (r *FlowRegistry) Take(key FlowKey) *FlowInfo {
 	e.claimed = true
 	fi := e.info
 	return &fi
+}
+
+// TakeWait polls for a flow that may still be in flight from the BPF ringbuf
+// (kernel event → userspace latency can exceed the local TLS handshake).
+func (r *FlowRegistry) TakeWait(key FlowKey, timeout time.Duration) *FlowInfo {
+	deadline := time.Now().Add(timeout)
+	for {
+		if fi := r.Take(key); fi != nil {
+			return fi
+		}
+		if !time.Now().Before(deadline) {
+			return nil
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// MarkClaimed inserts a claimed tombstone so the tripwire does not fire for a
+// session the proxy handled when no BPF flow event ever arrived (degraded or
+// slower than the TakeWait window).
+func (r *FlowRegistry) MarkClaimed(key FlowKey) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.flows[key]; !ok {
+		r.flows[key] = &flowEntry{claimed: true}
+	}
 }
 
 func (r *FlowRegistry) Release(key FlowKey) {

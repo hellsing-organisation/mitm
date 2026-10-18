@@ -2,10 +2,8 @@ package proxy
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -45,6 +43,7 @@ type connMeta struct {
 	proto   string
 	src     string
 	dst     string
+	flow    *audit.FlowInfo
 	pending sync.WaitGroup
 }
 
@@ -173,8 +172,7 @@ func (s *Server) handleConn(c net.Conn) {
 		src:     tc.RemoteAddr().String(),
 		dst:     origDst,
 	}
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%+v", key)))
-	meta.flowID = hex.EncodeToString(sum[:])[:16]
+	meta.flowID = audit.FlowID(key)
 
 	defer s.flows.Release(key)
 
@@ -190,8 +188,13 @@ func (s *Server) handleConn(c net.Conn) {
 		NextProtos: []string{"h2", "http/1.1"},
 		MinVersion: tls.VersionTLS12,
 	})
-	if err := tlsConn.Handshake(); err != nil {
-		s.emitClientTLSFailure(meta, err)
+	herr := tlsConn.Handshake()
+	meta.flow = s.flows.TakeWait(key, 200*time.Millisecond)
+	if meta.flow == nil {
+		s.flows.MarkClaimed(key)
+	}
+	if herr != nil {
+		s.emitClientTLSFailure(meta, herr)
 		return
 	}
 	tc.SetReadDeadline(time.Time{})
@@ -258,7 +261,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request, meta *connMet
 		return
 	}
 
-	fi := s.flows.Take(meta.key)
+	fi := meta.flow
 	var pid *int32
 	var uid *uint32
 	comm := ""
@@ -386,7 +389,7 @@ func (s *Server) emitClientTLSFailure(meta *connMeta, err error) {
 	var pid *int32
 	var uid *uint32
 	comm := ""
-	if fi := s.flows.Take(meta.key); fi != nil {
+	if fi := meta.flow; fi != nil {
 		p, u := fi.PID, fi.UID
 		pid, uid, comm = &p, &u, fi.Comm
 	}

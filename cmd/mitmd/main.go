@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -78,17 +80,28 @@ func run(ctx context.Context, cfg config.Config) error {
 
 	stopBPF, bpfErr := bpf.Load(func(ev bpf.FlowEvent) {
 		srcIP, dstIP := ev.SrcIP().String(), ev.DstIP().String()
-		flows.Add(audit.FlowKey{
+		key := audit.FlowKey{
 			SrcIP:   srcIP,
 			SrcPort: int(ev.Sport),
 			DstIP:   dstIP,
 			DstPort: int(ev.Dport),
-		}, audit.FlowInfo{
-			PID:  int32(ev.PID),
-			UID:  uint32(ev.UID),
-			Comm: ev.Comm,
-			Ts:   time.Now(),
-		})
+		}
+		pid := int32(ev.PID)
+		uid := uint32(ev.UID)
+		ts := time.Now().UTC()
+		flows.Add(key, audit.FlowInfo{PID: pid, UID: uid, Comm: ev.Comm, Ts: ts})
+		if werr := store.WriteEvent(audit.Event{
+			Ts:     ts,
+			Type:   audit.TypeFlow,
+			FlowID: audit.FlowID(key),
+			PID:    &pid,
+			UID:    &uid,
+			Comm:   ev.Comm,
+			Src:    net.JoinHostPort(srcIP, strconv.Itoa(int(ev.Sport))),
+			Dst:    net.JoinHostPort(dstIP, strconv.Itoa(int(ev.Dport))),
+		}); werr != nil {
+			fmt.Fprintf(os.Stderr, "mitmd: flow write: %v\n", werr)
+		}
 	}, true)
 
 	startup := audit.Event{Ts: time.Now().UTC(), Type: audit.TypeStartup}
