@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -65,6 +66,9 @@ func LoadOrGenerateCA(keyPath, certPath string, generate bool) (*CA, error) {
 
 	keyBytes, err := x509.MarshalECPrivateKey(caKey)
 	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o755); err != nil {
 		return nil, err
 	}
 	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}), 0o600); err != nil {

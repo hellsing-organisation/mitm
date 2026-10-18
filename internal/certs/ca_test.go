@@ -41,6 +41,17 @@ func TestLoadWithoutGenerateFailsOnMissing(t *testing.T) {
 	}
 }
 
+func TestGenerateCreatesParentDirs(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "deep", "er")
+	if _, err := LoadOrGenerateCA(filepath.Join(nested, "ca.key"), filepath.Join(nested, "ca.crt"), true); err != nil {
+		t.Fatalf("generate must create parent dirs: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(nested, "ca.crt")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLeafCacheAndIP(t *testing.T) {
 	dir := t.TempDir()
 	ca, err := LoadOrGenerateCA(filepath.Join(dir, "k"), filepath.Join(dir, "c"), true)
