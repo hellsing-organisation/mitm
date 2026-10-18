@@ -51,21 +51,44 @@ func ParseTracepointFormat(format string) (map[string]int, error) {
 	return off, nil
 }
 
-// ConstantsFromOffsets maps parsed offsets onto the volatile-const names
-// consumed by flows.bpf.c (rewritten into .rodata before load).
-func ConstantsFromOffsets(off map[string]int) map[string]uint32 {
-	return map[string]uint32{
-		"off_oldstate": uint32(off["oldstate"]),
-		"off_newstate": uint32(off["newstate"]),
-		"off_protocol": uint32(off["protocol"]),
-		"off_sport":    uint32(off["sport"]),
-		"off_dport":    uint32(off["dport"]),
-		"off_family":   uint32(off["family"]),
-		"off_saddr":    uint32(off["saddr"]),
-		"off_daddr":    uint32(off["daddr"]),
-		"off_saddr6":   uint32(off["saddr_v6"]),
-		"off_daddr6":   uint32(off["daddr_v6"]),
+// OffsetCfg mirrors struct offsets_cfg in bpf/flows.bpf.c (field order must
+// match: 10 consecutive uint32 values).
+type OffsetCfg struct {
+	Oldstate uint32
+	Newstate uint32
+	Protocol uint32
+	Sport    uint32
+	Dport    uint32
+	Family   uint32
+	Saddr    uint32
+	Daddr    uint32
+	Saddr6   uint32
+	Daddr6   uint32
+}
+
+// BuildOffsetCfg maps parsed tracepoint-format offsets onto the config
+// struct injected into the cfg array map before traffic flows.
+func BuildOffsetCfg(off map[string]int) OffsetCfg {
+	return OffsetCfg{
+		Oldstate: uint32(off["oldstate"]),
+		Newstate: uint32(off["newstate"]),
+		Protocol: uint32(off["protocol"]),
+		Sport:    uint32(off["sport"]),
+		Dport:    uint32(off["dport"]),
+		Family:   uint32(off["family"]),
+		Saddr:    uint32(off["saddr"]),
+		Daddr:    uint32(off["daddr"]),
+		Saddr6:   uint32(off["saddr_v6"]),
+		Daddr6:   uint32(off["daddr_v6"]),
 	}
+}
+
+// Stats mirrors the per-CPU counters in bpf/flows.bpf.c.
+type Stats struct {
+	Calls    uint64
+	Syn      uint64
+	FamilyOK uint64
+	RbFail   uint64
 }
 
 func indexByte(s string, b byte) int {

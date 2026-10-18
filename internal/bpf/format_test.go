@@ -75,22 +75,16 @@ func TestParseTracepointFormatMissingField(t *testing.T) {
 	}
 }
 
-func TestConstantsFromOffsets(t *testing.T) {
+func TestBuildOffsetCfg(t *testing.T) {
 	off, err := ParseTracepointFormat(newKernelFormat)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs := ConstantsFromOffsets(off)
-	for _, name := range []string{
-		"off_oldstate", "off_newstate", "off_protocol", "off_sport",
-		"off_dport", "off_family", "off_saddr", "off_daddr",
-		"off_saddr6", "off_daddr6",
-	} {
-		if _, ok := cs[name]; !ok {
-			t.Fatalf("constant %s missing", name)
-		}
+	cfg := BuildOffsetCfg(off)
+	if cfg.Family != 28 || cfg.Newstate != 20 {
+		t.Fatalf("cfg = %+v", cfg)
 	}
-	if cs["off_family"] != uint32(28) {
-		t.Fatalf("off_family = %v", cs["off_family"])
+	if cfg.Saddr6 != 40 || cfg.Daddr6 != 56 {
+		t.Fatalf("cfg v6 = %+v", cfg)
 	}
 }

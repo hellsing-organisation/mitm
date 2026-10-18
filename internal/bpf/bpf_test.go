@@ -59,9 +59,9 @@ func TestLoadDisabled(t *testing.T) {
 }
 
 func TestLoadEnabledWithoutObjects(t *testing.T) {
-	stop, err := Load(func(FlowEvent) {}, true)
+	probe, err := Load(func(FlowEvent) {}, true)
 	if err == nil {
-		stop()
+		probe.Stop()
 		t.Fatal("expected error without built objects or privileges")
 	}
 }

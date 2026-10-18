@@ -80,7 +80,7 @@ func run(ctx context.Context, cfg config.Config) error {
 	}, cfg.Ports)
 
 	var flowEvents atomic.Int64
-	stopBPF, bpfErr := bpf.Load(func(ev bpf.FlowEvent) {
+	probe, bpfErr := bpf.Load(func(ev bpf.FlowEvent) {
 		flowEvents.Add(1)
 		srcIP, dstIP := ev.SrcIP().String(), ev.DstIP().String()
 		key := audit.FlowKey{
@@ -115,14 +115,19 @@ func run(ctx context.Context, cfg config.Config) error {
 		}
 		fmt.Fprintf(os.Stderr, "mitmd: bpf disabled: %v\n", bpfErr)
 	} else {
-		defer stopBPF()
+		defer probe.Stop()
 		before := flowEvents.Load()
 		if c, derr := net.DialTimeout("tcp", "127.0.0.1:1", 300*time.Millisecond); derr == nil {
 			c.Close()
 		}
 		time.Sleep(500 * time.Millisecond)
-		startup.Note = fmt.Sprintf("bpf self-test: %d events after probe connect; %s",
-			flowEvents.Load()-before, bpf.LoadInfo())
+		statsNote := "stats-unavailable"
+		if st, serr := probe.ReadStats(); serr == nil {
+			statsNote = fmt.Sprintf("stats: calls=%d syn=%d family_ok=%d rb_fail=%d",
+				st.Calls, st.Syn, st.FamilyOK, st.RbFail)
+		}
+		startup.Note = fmt.Sprintf("bpf self-test: %d events after probe connect; %s; %s",
+			flowEvents.Load()-before, statsNote, bpf.LoadInfo())
 	}
 
 	if mgr != nil {

@@ -23,9 +23,14 @@ typedef long long __s64;
 #define __array(name, val) typeof(val) *name[]
 #endif
 
+#define BPF_MAP_TYPE_ARRAY 1
+#define BPF_MAP_TYPE_PERCPU_ARRAY 4
 #define BPF_MAP_TYPE_RINGBUF 27
 
+#define __always_inline inline __attribute__((always_inline))
+
 static __u64 (*bpf_ktime_get_ns)(void) = (void *)5;
+static void *(*bpf_map_lookup_elem)(void *map, const void *key) = (void *)1;
 static __u64 (*bpf_get_current_pid_tgid)(void) = (void *)14;
 static __u64 (*bpf_get_current_uid_gid)(void) = (void *)15;
 static __u32 (*bpf_get_current_comm)(void *buf, __u32 size) = (void *)16;

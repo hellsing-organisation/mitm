@@ -5,11 +5,11 @@ package bpf
 import (
 	"bytes"
 	_ "embed"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -29,17 +29,19 @@ var tracepointGroups = []string{"sock", "inet"}
 type flowsObjects struct {
 	InetSockSetState *ebpf.Program `ebpf:"inet_sock_set_state"`
 	Events           *ebpf.Map     `ebpf:"events"`
+	Cfg              *ebpf.Map     `ebpf:"cfg"`
+	Stats            *ebpf.Map     `ebpf:"stats"`
 }
 
 func loadFlowsSpec() (*ebpf.CollectionSpec, error) {
 	return ebpf.LoadCollectionSpecFromReader(bytes.NewReader(flowsObj))
 }
 
-// loadInfo records what the loader discovered and rewrote, surfaced in the
+// loadInfo records what the loader discovered and injected, surfaced in the
 // daemon's startup event for diagnosability.
 var loadInfo string
 
-// LoadInfo returns diagnostics from the last successful Load.
+// LoadInfo returns diagnostics from the last Load.
 func LoadInfo() string { return loadInfo }
 
 // discoverTracepoint locates the inet_sock_set_state tracepoint across kernel
@@ -57,7 +59,32 @@ func discoverTracepoint() (group, formatPath string, err error) {
 	return "", "", fmt.Errorf("tracepoint inet_sock_set_state not found under %v (kernel without tracing?)", tracefsCandidates)
 }
 
-func Load(onEvent func(FlowEvent), enabled bool) (stop func() error, err error) {
+// Stats returns the summed per-CPU counters from the running probe.
+func (p *Probe) ReadStats() (Stats, error) {
+	var out Stats
+	ncpu := runtime.NumCPU()
+	for idx, dst := range []*uint64{&out.Calls, &out.Syn, &out.FamilyOK, &out.RbFail} {
+		vals := make([]uint64, ncpu)
+		key := uint32(idx)
+		if err := p.stats.Lookup(&key, &vals); err != nil {
+			return Stats{}, err
+		}
+		for _, v := range vals {
+			*dst += v
+		}
+	}
+	return out, nil
+}
+
+// Probe is a handle on the loaded eBPF flow probe.
+type Probe struct {
+	stop  func() error
+	stats *ebpf.Map
+}
+
+func (p *Probe) Stop() error { return p.stop() }
+
+func Load(onEvent func(FlowEvent), enabled bool) (*Probe, error) {
 	if !enabled {
 		return nil, ErrDisabled
 	}
@@ -73,41 +100,42 @@ func Load(onEvent func(FlowEvent), enabled bool) (stop func() error, err error) 
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", formatPath, err)
 	}
-	loadInfo = fmt.Sprintf("group=%s format=%s offsets=%v", group, formatPath, off)
+	cfgVal := BuildOffsetCfg(off)
+	loadInfo = fmt.Sprintf("group=%s format=%s cfg=%+v", group, formatPath, cfgVal)
 
 	spec, err := loadFlowsSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load bpf spec: %w", err)
-	}
-	for name, val := range ConstantsFromOffsets(off) {
-		v, ok := spec.Variables[name]
-		if !ok {
-			return nil, fmt.Errorf("bpf object lacks layout variable %q", name)
-		}
-		if err := v.Set(val); err != nil {
-			return nil, fmt.Errorf("set %s: %w", name, err)
-		}
-	}
-	if err := patchRodata(spec, ConstantsFromOffsets(off)); err != nil {
-		return nil, err
 	}
 	var obj flowsObjects
 	if err := spec.LoadAndAssign(&obj, nil); err != nil {
 		return nil, fmt.Errorf("load bpf objects: %w", err)
 	}
 
+	zero := uint32(0)
+	if err := obj.Cfg.Put(&zero, cfgVal); err != nil {
+		obj.InetSockSetState.Close()
+		obj.Events.Close()
+		obj.Cfg.Close()
+		obj.Stats.Close()
+		return nil, fmt.Errorf("inject layout offsets: %w", err)
+	}
+
 	lnk, err := link.Tracepoint(group, "inet_sock_set_state", obj.InetSockSetState, nil)
 	if err != nil {
 		obj.InetSockSetState.Close()
 		obj.Events.Close()
+		obj.Cfg.Close()
+		obj.Stats.Close()
 		return nil, fmt.Errorf("attach tracepoint %s/inet_sock_set_state: %w", group, err)
 	}
-
 	rd, err := ringbuf.NewReader(obj.Events)
 	if err != nil {
 		lnk.Close()
 		obj.InetSockSetState.Close()
 		obj.Events.Close()
+		obj.Cfg.Close()
+		obj.Stats.Close()
 		return nil, fmt.Errorf("ringbuf reader: %w", err)
 	}
 
@@ -124,43 +152,21 @@ func Load(onEvent func(FlowEvent), enabled bool) (stop func() error, err error) 
 			}
 			if ev, perr := ParseFlowEvent(rec.RawSample); perr == nil {
 				onEvent(ev)
+			} else {
+				fmt.Fprintf(os.Stderr, "mitmd: parse flow event: %v\n", perr)
 			}
 		}
 	}()
 
-	stop = func() error {
+	stop := func() error {
 		rd.Close()
 		<-done
 		lnk.Close()
 		obj.InetSockSetState.Close()
 		obj.Events.Close()
+		obj.Cfg.Close()
+		obj.Stats.Close()
 		return nil
 	}
-	return stop, nil
-}
-
-// patchRodata writes the layout offsets into the .rodata image that is
-// actually loaded into the kernel. cilium's VariableSpec.Set does not mutate
-// MapSpec.Contents for constants, so without this the program would run with
-// compile-time default offsets.
-func patchRodata(spec *ebpf.CollectionSpec, cs map[string]uint32) error {
-	ro := spec.Maps[".rodata"]
-	if ro == nil || len(ro.Contents) == 0 || ro.Contents[0].Value == nil {
-		return fmt.Errorf("bpf object has no .rodata contents to patch")
-	}
-	data, ok := ro.Contents[0].Value.([]byte)
-	if !ok {
-		return fmt.Errorf(".rodata contents not bytes")
-	}
-	for name, val := range cs {
-		v, ok := spec.Variables[name]
-		if !ok {
-			return fmt.Errorf("bpf object lacks layout variable %q", name)
-		}
-		if int(v.Offset)+4 > len(data) {
-			return fmt.Errorf("variable %s offset %d beyond .rodata size %d", name, v.Offset, len(data))
-		}
-		binary.NativeEndian.PutUint32(data[v.Offset:], val)
-	}
-	return nil
+	return &Probe{stop: stop, stats: obj.Stats}, nil
 }
