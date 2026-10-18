@@ -20,7 +20,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-go build -o "$DIR/mitmd" "$ROOT/cmd/mitmd"
+go build -buildvcs=false -o "$DIR/mitmd" "$ROOT/cmd/mitmd"
 
 cat > "$DIR/mitm.yaml" <<EOF
 listen: 127.0.0.1:${PORT}
