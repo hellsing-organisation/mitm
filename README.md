@@ -23,7 +23,7 @@ else's traffic.
 
 ```sh
 make test                       # unit tests, no root needed
-go build ./cmd/mitmd ./cmd/mitmctl
+make build                      # bpf object + mitmd/mitmctl binaries
 
 sudo ./mitmctl ca gen --key /etc/mitm/ca.key --cert /etc/mitm/ca.crt
 # trust /etc/mitm/ca.crt in your browser/system trust store, then:

@@ -1,4 +1,6 @@
 /dist/
+/mitmd
+/mitmctl
 *.bpf.o
 bpf/vmlinux.h
 *.test
