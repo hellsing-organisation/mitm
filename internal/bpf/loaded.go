@@ -31,6 +31,7 @@ type flowsObjects struct {
 	Events           *ebpf.Map     `ebpf:"events"`
 	Cfg              *ebpf.Map     `ebpf:"cfg"`
 	Stats            *ebpf.Map     `ebpf:"stats"`
+	Diag             *ebpf.Map     `ebpf:"diag"`
 }
 
 func loadFlowsSpec() (*ebpf.CollectionSpec, error) {
@@ -76,10 +77,20 @@ func (p *Probe) ReadStats() (Stats, error) {
 	return out, nil
 }
 
+func (p *Probe) ReadDiag() (Diag, error) {
+	zero := uint32(0)
+	var d Diag
+	if err := p.diag.Lookup(&zero, &d); err != nil {
+		return Diag{}, err
+	}
+	return d, nil
+}
+
 // Probe is a handle on the loaded eBPF flow probe.
 type Probe struct {
 	stop  func() error
 	stats *ebpf.Map
+	diag  *ebpf.Map
 }
 
 func (p *Probe) Stop() error { return p.stop() }
@@ -118,6 +129,7 @@ func Load(onEvent func(FlowEvent), enabled bool) (*Probe, error) {
 		obj.Events.Close()
 		obj.Cfg.Close()
 		obj.Stats.Close()
+		obj.Diag.Close()
 		return nil, fmt.Errorf("inject layout offsets: %w", err)
 	}
 
@@ -127,6 +139,7 @@ func Load(onEvent func(FlowEvent), enabled bool) (*Probe, error) {
 		obj.Events.Close()
 		obj.Cfg.Close()
 		obj.Stats.Close()
+		obj.Diag.Close()
 		return nil, fmt.Errorf("attach tracepoint %s/inet_sock_set_state: %w", group, err)
 	}
 	rd, err := ringbuf.NewReader(obj.Events)
@@ -136,6 +149,7 @@ func Load(onEvent func(FlowEvent), enabled bool) (*Probe, error) {
 		obj.Events.Close()
 		obj.Cfg.Close()
 		obj.Stats.Close()
+		obj.Diag.Close()
 		return nil, fmt.Errorf("ringbuf reader: %w", err)
 	}
 
@@ -166,7 +180,8 @@ func Load(onEvent func(FlowEvent), enabled bool) (*Probe, error) {
 		obj.Events.Close()
 		obj.Cfg.Close()
 		obj.Stats.Close()
+		obj.Diag.Close()
 		return nil
 	}
-	return &Probe{stop: stop, stats: obj.Stats}, nil
+	return &Probe{stop: stop, stats: obj.Stats, diag: obj.Diag}, nil
 }

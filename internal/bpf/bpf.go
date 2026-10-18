@@ -91,6 +91,17 @@ type Stats struct {
 	RbFail   uint64
 }
 
+// Diag mirrors struct diag in bpf/flows.bpf.c: the last invocation's probe
+// read return codes and the values it observed.
+type Diag struct {
+	RetNewstate int32
+	RetProtocol int32
+	RetFamily   int32
+	Newstate    int32
+	Protocol    int32
+	Family      int32
+}
+
 func indexByte(s string, b byte) int {
 	for i := 0; i < len(s); i++ {
 		if s[i] == b {
