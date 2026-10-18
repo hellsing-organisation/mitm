@@ -8,3 +8,6 @@ func Load(onEvent func(FlowEvent), enabled bool) (stop func() error, err error) 
 	}
 	return nil, ErrNotBuilt
 }
+
+// LoadInfo reports loader diagnostics; empty when built without the bpf tag.
+func LoadInfo() string { return "" }
