@@ -59,22 +59,6 @@ struct {
     __type(value, __u64);
 } stats SEC(".maps");
 
-struct diag {
-    __s32 ret_newstate;
-    __s32 ret_protocol;
-    __s32 ret_family;
-    __s32 newstate;
-    __s32 protocol;
-    __s32 family;
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, struct diag);
-} diag SEC(".maps");
-
 enum {
     STAT_CALLS = 0,
     STAT_SYN = 1,
@@ -98,27 +82,19 @@ int inet_sock_set_state(void *ctx)
     if (!o)
         return 0;
 
-    int newstate = 0, protocol = 0;
+    int newstate = 0;
+    __u16 protocol = 0;
     __u16 family = 0;
-    __s32 r1 = bpf_probe_read_kernel(&newstate, sizeof(newstate), (char *)ctx + o->newstate);
-    __s32 r2 = bpf_probe_read_kernel(&protocol, sizeof(protocol), (char *)ctx + o->protocol);
-    __s32 r3 = bpf_probe_read_kernel(&family, sizeof(family), (char *)ctx + o->family);
-
-    {
-        struct diag d = {};
-        d.ret_newstate = r1;
-        d.ret_protocol = r2;
-        d.ret_family = r3;
-        d.newstate = newstate;
-        d.protocol = protocol;
-        d.family = family;
-        __u32 dz = 0;
-        bpf_map_update_elem(&diag, &dz, &d, BPF_ANY);
-    }
+    bpf_probe_read_kernel(&newstate, sizeof(newstate), (char *)ctx + o->newstate);
+    bpf_probe_read_kernel(&protocol, sizeof(protocol), (char *)ctx + o->protocol);
+    bpf_probe_read_kernel(&family, sizeof(family), (char *)ctx + o->family);
 
     if (newstate != TCP_SYN_SENT || protocol != IPPROTO_TCP)
         return 0;
     stat_add(STAT_SYN);
+    if (family != AF_INET && family != AF_INET6)
+        return 0;
+    stat_add(STAT_FAMILY_OK);
 
     struct flow_event_t ev = {};
     ev.ts = bpf_ktime_get_ns();

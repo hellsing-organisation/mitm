@@ -18,9 +18,5 @@ func (p *Probe) ReadStats() (Stats, error) {
 	return Stats{}, ErrNotBuilt
 }
 
-func (p *Probe) ReadDiag() (Diag, error) {
-	return Diag{}, ErrNotBuilt
-}
-
 // LoadInfo reports loader diagnostics; empty when built without the bpf tag.
 func LoadInfo() string { return "" }

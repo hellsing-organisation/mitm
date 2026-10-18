@@ -126,10 +126,6 @@ func run(ctx context.Context, cfg config.Config) error {
 			statsNote = fmt.Sprintf("stats: calls=%d syn=%d family_ok=%d rb_fail=%d",
 				st.Calls, st.Syn, st.FamilyOK, st.RbFail)
 		}
-		if dg, derr := probe.ReadDiag(); derr == nil {
-			statsNote += fmt.Sprintf(" diag: newstate=%d protocol=%d family=%d rets=(%d,%d,%d)",
-				dg.Newstate, dg.Protocol, dg.Family, dg.RetNewstate, dg.RetProtocol, dg.RetFamily)
-		}
 		startup.Note = fmt.Sprintf("bpf self-test: %d events after probe connect; %s; %s",
 			flowEvents.Load()-before, statsNote, bpf.LoadInfo())
 	}
