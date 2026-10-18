@@ -1,9 +1,13 @@
 BINARIES := mitmd mitmctl
 
-.PHONY: build test vet clean bpf android demo
+.PHONY: build test vet clean bpf bpf-obj android demo
 
-build:
-	go build -buildvcs=false ./...
+build: bpf-obj
+	go build -tags bpf -buildvcs=false -o mitmd ./cmd/mitmd
+	go build -buildvcs=false -o mitmctl ./cmd/mitmctl
+
+bpf-obj:
+	clang -target bpfel -O2 -g -Ibpf -c bpf/flows.bpf.c -o internal/bpf/flows.bpf.o
 
 vet:
 	go vet ./...
@@ -11,8 +15,7 @@ vet:
 test:
 	go test ./...
 
-bpf:
-	clang -target bpfel -O2 -g -Ibpf -c bpf/flows.bpf.c -o internal/bpf/flows.bpf.o
+bpf: bpf-obj
 	go build -tags bpf -buildvcs=false ./...
 	go test -tags bpf ./internal/bpf/
 
