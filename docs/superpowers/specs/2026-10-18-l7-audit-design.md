@@ -179,3 +179,27 @@ output:
 
 - Intercepting traffic of devices/users other than the owner's own.
 - Bypassing certificate pinning (flows get flagged, not decrypted).
+
+## Implementation notes (post-verification on kernel 6.18)
+
+Findings from the first real-kernel bring-up, kept here because each one cost a
+debugging round:
+
+1. **`inet_sock_set_state` moved tracepoint groups**: pre-6.18 the group is
+   `inet` (`include/trace/events/inet.h`); 6.18+ it is `sock`
+   (`include/trace/events/sock.h`) and the `skbaddr` field was dropped, so
+   the record layout shifted by 8 bytes. The loader now discovers the group
+   and parses the live `format` file, injecting field offsets into the probe
+   through an ARRAY map (`cfg`) — no `.rodata` rewriting (cilium's
+   `VariableSpec.Set` does not mutate the loaded image) and no hardcoded
+   layouts.
+2. **`sport` is 0 at `TCP_SYN_SENT`** — `inet_hash_connect` binds the
+   ephemeral port *after* `tcp_set_state(sk, TCP_SYN_SENT)`. The probe stashes
+   `{pid,uid,comm}` keyed by `(family, daddr, dport)` at SYN_SENT and emits
+   the completed flow on that socket's first subsequent transition (usually
+   ESTABLISHED; CLOSE for refused connects).
+3. **Tracepoint fields are exactly the sizes the format file declares**
+   (`protocol` is `__u16` — a 4-byte read swallows two saddr bytes and breaks
+   filtering). Field-level diagnostics (per-stage counters, last-read
+   snapshot) in the probe are surfaced in the daemon's startup event and are
+   what made these diagnosable on-target.
