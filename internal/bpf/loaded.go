@@ -63,7 +63,7 @@ func discoverTracepoint() (group, formatPath string, err error) {
 func (p *Probe) ReadStats() (Stats, error) {
 	var out Stats
 	ncpu := runtime.NumCPU()
-	for idx, dst := range []*uint64{&out.Calls, &out.Syn, &out.FamilyOK, &out.RbFail} {
+	for idx, dst := range []*uint64{&out.Calls, &out.Syn, &out.FamilyOK, &out.RbFail, &out.Emit} {
 		vals := make([]uint64, ncpu)
 		key := uint32(idx)
 		if err := p.stats.Lookup(&key, &vals); err != nil {

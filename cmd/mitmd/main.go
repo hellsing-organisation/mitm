@@ -123,8 +123,8 @@ func run(ctx context.Context, cfg config.Config) error {
 		time.Sleep(500 * time.Millisecond)
 		statsNote := "stats-unavailable"
 		if st, serr := probe.ReadStats(); serr == nil {
-			statsNote = fmt.Sprintf("stats: calls=%d syn=%d family_ok=%d rb_fail=%d",
-				st.Calls, st.Syn, st.FamilyOK, st.RbFail)
+			statsNote = fmt.Sprintf("stats: calls=%d syn=%d emit=%d rb_fail=%d",
+				st.Calls, st.Syn, st.Emit, st.RbFail)
 		}
 		startup.Note = fmt.Sprintf("bpf self-test: %d events after probe connect; %s; %s",
 			flowEvents.Load()-before, statsNote, bpf.LoadInfo())

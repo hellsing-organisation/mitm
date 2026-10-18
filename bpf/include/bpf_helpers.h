@@ -25,6 +25,7 @@ typedef long long __s64;
 
 #define BPF_MAP_TYPE_ARRAY 2
 #define BPF_MAP_TYPE_PERCPU_ARRAY 6
+#define BPF_MAP_TYPE_LRU_HASH 9
 #define BPF_MAP_TYPE_RINGBUF 27
 
 #define __always_inline inline __attribute__((always_inline))
@@ -32,6 +33,7 @@ typedef long long __s64;
 static __u64 (*bpf_ktime_get_ns)(void) = (void *)5;
 static void *(*bpf_map_lookup_elem)(void *map, const void *key) = (void *)1;
 static long (*bpf_map_update_elem)(void *map, const void *key, const void *value, __u64 flags) = (void *)2;
+static long (*bpf_map_delete_elem)(void *map, const void *key) = (void *)3;
 
 #define BPF_ANY 0
 static __u64 (*bpf_get_current_pid_tgid)(void) = (void *)14;

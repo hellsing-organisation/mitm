@@ -89,6 +89,7 @@ type Stats struct {
 	Syn      uint64
 	FamilyOK uint64
 	RbFail   uint64
+	Emit     uint64
 }
 
 func indexByte(s string, b byte) int {
