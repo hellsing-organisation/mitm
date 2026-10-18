@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
+	"strconv"
 )
 
 const SizeofFlowEvent = 80
@@ -13,6 +15,67 @@ var (
 	ErrDisabled = errors.New("bpf flow probe disabled by caller")
 	ErrNotBuilt = errors.New("bpf objects not built (run make bpf)")
 )
+
+var fieldRe = regexp.MustCompile(`field:([^\s;]+(?:\s+[^\s;]+)?)\s+([^\s;]+)(?:\[\d+\])?;\s*offset:(\d+);\s*size:(\d+)`)
+
+var requiredFields = []string{
+	"oldstate", "newstate", "sport", "dport", "family", "protocol",
+	"saddr", "daddr", "saddr_v6", "daddr_v6",
+}
+
+// ParseTracepointFormat extracts field-name → byte-offset from the textual
+// "format" file of a tracepoint. Layouts drift across kernel versions (e.g.
+// inet_sock_set_state moved groups and lost skbaddr in 6.18), so offsets are
+// discovered at load time instead of hardcoded.
+func ParseTracepointFormat(format string) (map[string]int, error) {
+	off := make(map[string]int)
+	for _, m := range fieldRe.FindAllStringSubmatch(format, -1) {
+		name := m[2]
+		if i := indexByte(name, '['); i >= 0 {
+			name = name[:i]
+		}
+		o, err := strconv.Atoi(m[3])
+		if err != nil {
+			continue
+		}
+		off[name] = o
+	}
+	if len(off) == 0 {
+		return nil, fmt.Errorf("no fields parsed from tracepoint format")
+	}
+	for _, f := range requiredFields {
+		if _, ok := off[f]; !ok {
+			return nil, fmt.Errorf("tracepoint format missing field %q", f)
+		}
+	}
+	return off, nil
+}
+
+// ConstantsFromOffsets maps parsed offsets onto the volatile-const names
+// consumed by flows.bpf.c (rewritten into .rodata before load).
+func ConstantsFromOffsets(off map[string]int) map[string]uint32 {
+	return map[string]uint32{
+		"off_oldstate": uint32(off["oldstate"]),
+		"off_newstate": uint32(off["newstate"]),
+		"off_protocol": uint32(off["protocol"]),
+		"off_sport":    uint32(off["sport"]),
+		"off_dport":    uint32(off["dport"]),
+		"off_family":   uint32(off["family"]),
+		"off_saddr":    uint32(off["saddr"]),
+		"off_daddr":    uint32(off["daddr"]),
+		"off_saddr6":   uint32(off["saddr_v6"]),
+		"off_daddr6":   uint32(off["daddr_v6"]),
+	}
+}
+
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
 
 type FlowEvent struct {
 	Ts     uint64
