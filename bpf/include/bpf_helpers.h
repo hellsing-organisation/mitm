@@ -23,8 +23,8 @@ typedef long long __s64;
 #define __array(name, val) typeof(val) *name[]
 #endif
 
-#define BPF_MAP_TYPE_ARRAY 1
-#define BPF_MAP_TYPE_PERCPU_ARRAY 4
+#define BPF_MAP_TYPE_ARRAY 2
+#define BPF_MAP_TYPE_PERCPU_ARRAY 6
 #define BPF_MAP_TYPE_RINGBUF 27
 
 #define __always_inline inline __attribute__((always_inline))
