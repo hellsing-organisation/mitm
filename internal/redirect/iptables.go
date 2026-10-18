@@ -21,40 +21,57 @@ func (m *IPTablesManager) families() []string {
 	return []string{"iptables", "ip6tables"}
 }
 
-func (m *IPTablesManager) On() error {
+type iptCmd struct {
+	args     []string
+	tolerate bool
+}
+
+func (m *IPTablesManager) commands() ([]iptCmd, error) {
 	port, err := listenPort(m.cfg.Listen)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dports := portList(m.cfg.Ports)
 
+	cmds := []iptCmd{
+		{args: []string{"-t", "nat", "-D", "OUTPUT", "-j", "MITM_NAT_OUT"}, tolerate: true},
+		{args: []string{"-t", "nat", "-F", "MITM_NAT_OUT"}, tolerate: true},
+		{args: []string{"-t", "nat", "-X", "MITM_NAT_OUT"}, tolerate: true},
+		{args: []string{"-t", "nat", "-N", "MITM_NAT_OUT"}},
+		{args: []string{"-t", "nat", "-A", "OUTPUT", "-j", "MITM_NAT_OUT"}},
+		{args: []string{"-t", "nat", "-A", "MITM_NAT_OUT",
+			"-m", "mark", "--mark", fmt.Sprint(m.cfg.Redirect.Mark), "-j", "RETURN"}},
+	}
+	if m.uid != 0 {
+		cmds = append(cmds, iptCmd{args: []string{"-t", "nat", "-A", "MITM_NAT_OUT",
+			"-m", "owner", "!", "--uid-owner", fmt.Sprint(m.uid), "-j", "RETURN"}})
+	}
+	cmds = append(cmds,
+		iptCmd{args: []string{"-t", "nat", "-A", "MITM_NAT_OUT",
+			"-p", "tcp", "-m", "multiport", "--dports", dports, "-j", "REDIRECT", "--to-ports", port}},
+		iptCmd{args: []string{"-D", "OUTPUT", "-j", "MITM_FILT_OUT"}, tolerate: true},
+		iptCmd{args: []string{"-F", "MITM_FILT_OUT"}, tolerate: true},
+		iptCmd{args: []string{"-X", "MITM_FILT_OUT"}, tolerate: true},
+		iptCmd{args: []string{"-N", "MITM_FILT_OUT"}},
+		iptCmd{args: []string{"-A", "OUTPUT", "-j", "MITM_FILT_OUT"}},
+	)
+	if m.cfg.QUIC.ForceTCP {
+		cmds = append(cmds, iptCmd{args: []string{"-A", "MITM_FILT_OUT",
+			"-p", "udp", "-m", "multiport", "--dports", "443", "-j", "REJECT"}})
+	}
+	return cmds, nil
+}
+
+func (m *IPTablesManager) On() error {
+	cmds, err := m.commands()
+	if err != nil {
+		return err
+	}
 	for _, ipt := range m.families() {
-		var natRules []string
-		natRules = append(natRules, "-t", "nat", "-N", "MITM_NAT_OUT")
-		natRules = append(natRules, "-t", "nat", "-A", "OUTPUT", "-j", "MITM_NAT_OUT")
-		natRules = append(natRules, "-t", "nat", "-F", "MITM_NAT_OUT")
-		natRules = append(natRules, "-t", "nat", "-A", "MITM_NAT_OUT",
-			"-m", "mark", "--mark", fmt.Sprint(m.cfg.Redirect.Mark), "-j", "RETURN")
-		if m.uid != 0 {
-			natRules = append(natRules, "-t", "nat", "-A", "MITM_NAT_OUT",
-				"-m", "owner", "!", "--uid-owner", fmt.Sprint(m.uid), "-j", "RETURN")
-		}
-		natRules = append(natRules, "-t", "nat", "-A", "MITM_NAT_OUT",
-			"-p", "tcp", "-m", "multiport", "--dports", dports, "-j", "REDIRECT", "--to-ports", port)
-
-		var filtRules []string
-		filtRules = append(filtRules, "-N", "MITM_FILT_OUT")
-		filtRules = append(filtRules, "-A", "OUTPUT", "-j", "MITM_FILT_OUT")
-		filtRules = append(filtRules, "-F", "MITM_FILT_OUT")
-		if m.cfg.QUIC.ForceTCP {
-			filtRules = append(filtRules, "-A", "MITM_FILT_OUT",
-				"-p", "udp", "-m", "multiport", "--dports", "443", "-j", "REJECT")
-		}
-
-		for _, chunk := range [][]string{natRules, filtRules} {
-			out, err := m.run.Run(ipt, chunk...)
-			if err != nil {
-				return fmt.Errorf("%s on: %s", ipt, strings.TrimSpace(string(out)))
+		for _, c := range cmds {
+			out, err := m.run.Run(ipt, c.args...)
+			if err != nil && !c.tolerate {
+				return fmt.Errorf("%s on (%s): %s", ipt, strings.Join(c.args, " "), strings.TrimSpace(string(out)))
 			}
 		}
 	}
@@ -72,8 +89,7 @@ func (m *IPTablesManager) Off() error {
 			{"-X", "MITM_FILT_OUT"},
 		}
 		for _, chunk := range rules {
-			out, _ := m.run.Run(ipt, chunk...)
-			_ = out
+			m.run.Run(ipt, chunk...)
 		}
 	}
 	return nil

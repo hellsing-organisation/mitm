@@ -31,9 +31,14 @@ quic: { force_tcp: true }
 output: { dir: ${DIR}/audit, jsonl: events.jsonl }
 EOF
 
-"$DIR/mitmd" -config "$DIR/mitm.yaml" &
+"$DIR/mitmd" -config "$DIR/mitm.yaml" > "$DIR/mitmd.log" 2>&1 &
 MITMD_PID=$!
 for i in $(seq 1 50); do [ -f "$DIR/audit/proxy.addr" ] && break; sleep 0.1; done
+if [ ! -f "$DIR/audit/proxy.addr" ]; then
+    echo "DEMO FAILED: mitmd did not start. Log:" >&2
+    cat "$DIR/mitmd.log" >&2
+    exit 1
+fi
 
 # Trust our CA for the outbound client.
 # curl is excluded from capture only via filters (none here), so the request
@@ -47,5 +52,8 @@ cat "$DIR/audit/events.jsonl" || true
 if grep -q '"type":"http"' "$DIR/audit/events.jsonl" 2>/dev/null; then
     echo "DEMO OK: L7 event captured"
 else
-    echo "DEMO INCOMPLETE: no http event (bpf degraded? nft missing? check $(dirname "$0")/demo output)"
+    echo "DEMO INCOMPLETE: no http event captured"
+    echo "--- mitmd log (tail) ---"
+    tail -20 "$DIR/mitmd.log" || true
+    exit 1
 fi
