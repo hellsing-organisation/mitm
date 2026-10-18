@@ -20,7 +20,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-go build -buildvcs=false -o "$DIR/mitmd" "$ROOT/cmd/mitmd"
+go build -buildvcs=false -o "$DIR/mitmd" "$ROOT/cmd/mitmd" || exit 1
+
+# Build with eBPF flow attribution when clang + kernel BTF are available.
+if command -v clang >/dev/null 2>&1 && [ -f /sys/kernel/btf/vmlinux ]; then
+    if clang -target bpfel -O2 -g -I"$ROOT/bpf" -c "$ROOT/bpf/flows.bpf.c" \
+        -o "$ROOT/internal/bpf/flows.bpf.o" 2>/dev/null; then
+        go build -buildvcs=false -tags bpf -o "$DIR/mitmd" "$ROOT/cmd/mitmd"
+        echo "mitmd built with eBPF flow probe"
+    else
+        echo "WARNING: bpf probe failed to compile; running degraded (no PID attribution)"
+    fi
+else
+    echo "WARNING: clang or /sys/kernel/btf/vmlinux missing; running degraded (no PID attribution)"
+fi
 
 cat > "$DIR/mitm.yaml" <<EOF
 listen: 127.0.0.1:${PORT}
