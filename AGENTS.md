@@ -33,7 +33,8 @@ eBPF side in C. Spec: `docs/superpowers/specs/2026-10-18-l7-audit-design.md`
 - Root runs (sudo demo) can leave root-owned `internal/bpf/flows.bpf.o`; the
   owning user can `rm -f` it (directory is user-owned).
 - After a hard kill (`kill -9`) of mitmd, nftables table `mitm_audit` lingers
-  and blackholes TCP 443 — clean with `sudo nft delete table inet mitm_audit`.
+  and blackholes TCP 443 — clean with `make teardown` (or
+  `sudo nft delete table inet mitm_audit`).
 - Repo path/module spell the org `hellsing-organization`, but the GitHub org
   is `hellsing-organisation` — known mismatch, don't "fix" one side blindly.
 

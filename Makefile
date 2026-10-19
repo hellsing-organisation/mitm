@@ -1,6 +1,11 @@
 BINARIES := mitmd mitmctl
 
-.PHONY: build test vet clean bpf bpf-obj android demo
+.PHONY: build test vet clean bpf bpf-obj android demo teardown
+
+teardown:
+	sudo nft delete table inet mitm_audit 2>/dev/null || true
+	sudo pkill -x mitmd 2>/dev/null || true
+	@echo "teardown done: redirect rules removed"
 
 build: bpf-obj
 	go build -tags bpf -buildvcs=false -o mitmd ./cmd/mitmd

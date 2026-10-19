@@ -37,7 +37,8 @@ mitmctl query --app telegram --since 2026-10-18T00:00:00Z
 dports from `ports:` are REDIRECTed to the local proxy; the daemon's own
 upstream sockets are excluded via `SO_MARK` (and uid match) so there is no
 loop; UDP 443 is rejected to force QUIC fallback. On shutdown everything is
-removed.
+removed. After a hard kill, `make teardown` restores connectivity
+(removes the lingering redirect table and stops any daemon).
 
 ## Android (rooted)
 
